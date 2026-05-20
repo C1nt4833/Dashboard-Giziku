@@ -13,9 +13,6 @@ strl.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Menghilangkan warning matplotlib global
-strl.set_option('deprecation.showPyplotGlobalUse', False)
-
 # Set style visualisasi agar serasi dengan Streamlit (Dark/Light mode adaptive)
 sns.set_theme(style="whitegrid")
 
