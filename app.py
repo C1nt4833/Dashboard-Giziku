@@ -4,7 +4,7 @@ import numpy as np
 import plotly.express as px
 
 # ==========================================
-# 1. KONFIGURASI HALAMAN & TEMA WARNA (KUSTOM CSS)
+# 1. KONFIGURASI HALAMAN & TEMA WARNA
 # ==========================================
 st.set_page_config(
     page_title="Giziku Anak - Panduan Gizi Orang Tua",
@@ -12,15 +12,13 @@ st.set_page_config(
     layout="wide"
 )
 
-# Kustom CSS untuk memaksa tema warna dominan Hijau & Putih murni yang bersih
+# Kustom CSS untuk tema Hijau murni yang bersih
 st.markdown("""
     <style>
-    /* Mengubah warna latar belakang utama dan teks */
     .stApp {
         background-color: #FFFFFF;
         color: #2E7D32;
     }
-    /* Mengubah gaya tombol dan navigasi */
     .stTabs [data-baseweb="tab"] {
         color: #4CAF50;
         font-weight: bold;
@@ -43,22 +41,22 @@ st.markdown("""
 # ==========================================
 @st.cache_data
 def load_all_data():
-    # Data Gizi Makanan
+    # 2a. Memuat Data Gizi Makanan Anak (Sesuai file revisi Anda)
     url_makanan = "https://raw.githubusercontent.com/ekasaaa/analisis-dataset-gizi/refs/heads/main/nilai-gizi.csv"
-    df_makanan = pd.read_csv(url_makanan, sep=";")
+    df_makanan = pd.read_csv(url_makanan)
+    df_makanan.columns = df_makanan.columns.str.strip()
     
-    df_makanan.drop(df_makanan.columns[df_makanan.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
-    kolom_gizi = ['Energi (kkal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)']
+    # Bersihkan kolom gizi utama dari teks tak bernilai jika tipenya objek/string
+    kolom_gizi = ['Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
     for col in kolom_gizi:
-        if df_makanan[col].dtype == 'object':
-            df_makanan[col] = df_makanan[col].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float)
-            df_makanan[col] = df_makanan[col].fillna(df_makanan[col].median())
+        if col in df_makanan.columns:
+            if df_makanan[col].dtype == 'object':
+                df_makanan[col] = df_makanan[col].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float)
+            df_makanan[col] = pd.to_numeric(df_makanan[col], errors='coerce').fillna(0)
             
-    # Data Standar AKG (Menggunakan dataset asli Anda)
+    # 2b. Memuat Data Standar AKG (Sesuai file akg_indonesia_final Anda)
     url_akg = "https://raw.githubusercontent.com/C1nt4833/giziku-etl/main/akg_indonesia_final.csv"
     df_akg = pd.read_csv(url_akg)
-    
-    # Bersihkan spasi atau karakter aneh bawaan pada nama kolom jika ada
     df_akg.columns = df_akg.columns.str.strip()
     
     return df_makanan, df_akg
@@ -70,46 +68,43 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 3. SIDEBAR: PROFIL ANAK KHUSUS 6-12 TAHUN
+# 3. SIDEBAR: PROFIL ANAK (FILTER AKG)
 # ==========================================
 st.sidebar.image("https://img.icons8.com/color/96/children.png", width=80)
 st.sidebar.title("💚 Profil Buah Hati")
 st.sidebar.markdown("Sesuaikan pilihan di bawah dengan profil anak Anda untuk melihat rekomendasi porsi.")
 
-# Input Pilihan Orang Tua
 selected_gender = st.sidebar.radio("Jenis Kelamin Anak:", ['Laki-laki', 'Perempuan'])
 selected_usia = st.sidebar.selectbox("Rentang Usia Anak:", ['Anak (7-9 tahun)', 'Anak (10-12 tahun)'])
 
-# --- LOGIKA FILTER SESUAI STRUKTUR CSV ASLI ---
+# Logika filter mencocokkan struktur baris akg_indonesia_final.csv
 if selected_usia == 'Anak (7-9 tahun)':
-    # Di dataset Anda, usia 7-9 tahun masuk Kategori 'Bayi/Anak'
     df_akg_filtered = df_akg[
         (df_akg['Kategori'] == 'Bayi/Anak') & 
-        (df_akg['Label_Umur_Kondisi'].str.contains('7-9'))
+        (df_akg['Label_Umur_Kondisi'].str.contains('7-9', na=False))
     ]
 else:
-    # Usia 10-12 tahun terbagi berdasarkan jenis kelamin 'Laki-Laki' atau 'Perempuan'
     kategori_target = 'Laki-Laki' if selected_gender == 'Laki-laki' else 'Perempuan'
     df_akg_filtered = df_akg[
         (df_akg['Kategori'] == kategori_target) & 
-        (df_akg['Label_Umur_Kondisi'].str.contains('10-12'))
+        (df_akg['Label_Umur_Kondisi'].str.contains('10-12', na=False))
     ]
 
-# Mengambil nilai batas AKG harian dari baris yang berhasil difilter
+# Ambil nilai limit AKG harian dan pastikan bertipe Float numeric murni
 if not df_akg_filtered.empty:
-    limit_energi = float(df_akg_filtered['Energi (kkal)'].values[0])
-    limit_protein = float(df_akg_filtered['Protein (g)'].values[0])
-    limit_karbo = float(df_akg_filtered['Karbohidrat (g)'].values[0])
-    limit_lemak = float(df_akg_filtered['Lemak (g)'].values[0])
+    limit_energi = float(pd.to_numeric(df_akg_filtered['Energi (kkal)'].values[0], errors='coerce'))
+    limit_protein = float(pd.to_numeric(df_akg_filtered['Protein (g)'].values[0], errors='coerce'))
+    limit_karbo = float(pd.to_numeric(df_akg_filtered['Karbohidrat (g)'].values[0], errors='coerce'))
+    limit_lemak = float(pd.to_numeric(df_akg_filtered['Lemak (g)'].values[0], errors='coerce'))
 else:
-    # Angka standar darurat jika terjadi kegagalan sistem membaca file
-    limit_energi, limit_protein, limit_karbo, limit_lemak = 1800.0, 45.0, 250.0, 55.0
+    # Angka fallback standar anak sekolah dasar jika filter kosong
+    limit_energi, limit_protein, limit_karbo, limit_lemak = 1650.0, 40.0, 250.0, 55.0
 
-# Tampilan Kuota Gizi Harian Anak di Sidebar
+# Box info kebutuhan harian anak di sidebar
 st.sidebar.markdown(f"""
 <div style="background-color: #E8F5E9; padding: 15px; border-radius: 10px; border-left: 5px solid #2E7D32;">
 <b style="color: #1B5E20;">🎯 Kebutuhan Harian Anak:</b><br/>
-• 🔋 <b>Energi:</b> {limit_energi:.0f} kkal<br/>
+• 🔋 <b>Energi:</b> {limit_energi:.0f} kal<br/>
 • 🥩 <b>Protein:</b> {limit_protein:.0f} g<br/>
 • 🍞 <b>Karbohidrat:</b> {limit_karbo:.0f} g<br/>
 • 🥑 <b>Lemak:</b> {limit_lemak:.0f} g
@@ -123,103 +118,99 @@ st.title("👦 Dashboard Giziku Anak Sekolah (Usia 6-12 Tahun)")
 st.markdown("Membantu Ayah & Bunda memantau nutrisi makanan, bekal sekolah, dan jajanan harian anak demi tumbuh kembang yang optimal.")
 st.markdown("---")
 
-# --- FITUR INTERAKTIF UTAMA: PANDUAN MENU HARIAN ANAK ---
+# --- FITUR 1: SIMULASI MENU HARIAN ANAK ---
 st.header("🛒 Fitur 1: Simulasi Menu Makan & Jajanan Anak")
-st.markdown("*Bunda bisa memilih satu atau beberapa makanan yang dimakan anak hari ini untuk melihat apakah gizinya sudah tercukupi atau justru berlebihan.*")
+st.markdown("*Bunda bisa memilih satu atau beberapa makanan yang dimakan anak hari ini untuk melihat pemenuhan gizinya.*")
 
 pilihan_makanan_ortu = st.multiselect(
     "Pilih makanan/jajanan yang dikonsumsi anak hari ini:",
-    options=df_makanan['Nama_Makanan'].unique(),
-    default=[df_makanan['Nama_Makanan'].iloc[0]] if len(df_makanan) > 0 else None
+    options=df_makanan['Nama'].unique() if 'Nama' in df_makanan.columns else df_makanan.iloc[:,0].unique(),
+    default=[]
 )
 
-df_selected_menu = df_makanan[df_makanan['Nama_Makanan'].isin(pilihan_makanan_ortu)]
+df_selected_menu = df_makanan[df_makanan['Nama'].isin(pilihan_makanan_ortu)] if 'Nama' in df_makanan.columns else pd.DataFrame()
 
 if not df_selected_menu.empty:
-    total_energi = df_selected_menu['Energi (kkal)'].sum()
-    total_protein = df_selected_menu['Protein (g)'].sum()
-    total_karbo = df_selected_menu['Karbohidrat (g)'].sum()
-    total_lemak = df_selected_menu['Lemak (g)'].sum()
-    total_gula = df_selected_menu['Gula (g)'].sum()
+    total_energi = float(df_selected_menu['Kalori (kal)'].sum())
+    total_protein = float(df_selected_menu['Protein (g)'].sum())
+    total_karbo = float(df_selected_menu['Karbohidrat (g)'].sum())
+    total_lemak = float(df_selected_menu['Lemak (g)'].sum())
+    total_gula = float(df_selected_menu['Gula (g)'].sum())
     
     pct_energi = (total_energi / limit_energi) * 100
     pct_protein = (total_protein / limit_protein) * 100
     
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
-        st.metric("Total Kalori Masuk", f"{total_energi:.1f} kkal", f"{pct_energi:.1f}% Kebutuhan Harian")
+        st.metric("Total Kalori Masuk", f"{total_energi:.1f} kal", f"{pct_energi:.1f}% Target")
     with col_m2:
-        st.metric("Total Protein", f"{total_protein:.1f} g", f"{pct_protein:.1f}% Kebutuhan Harian")
+        st.metric("Total Protein", f"{total_protein:.1f} g", f"{pct_protein:.1f}% Target")
     with col_m3:
-        st.metric("Total Gula Dikonsumsi", f"{total_gula:.1f} g", "Batas anak: ~25g/hari", delta_color="inverse")
+        st.metric("Total Gula", f"{total_gula:.1f} g", "Batas anak: ~25g", delta_color="inverse")
     with col_m4:
-        st.metric("Jumlah Item Makanan", f"{len(df_selected_menu)} Menu")
+        st.metric("Jumlah Item", f"{len(df_selected_menu)} Menu")
 
     st.markdown("#### 💡 Catatan & Evaluasi Gizi Bekal/Jajanan Anak:")
     if total_gula > 25:
-        st.error("⚠️ **Peringatan Gula:** Makanan yang dipilih mengandung gula tinggi (lebih dari 25 gram). Kurangi jajanan manis hari ini untuk mencegah anak terlalu hiperaktif dan menjaga kesehatan gigi!")
+        st.error("⚠️ **Peringatan Gula:** Jajanan pilihan mengandung gula tinggi (lebih dari 25 gram). Batasi konsumsi makanan manis lainnya hari ini ya Bun!")
     elif total_protein < (limit_protein * 0.3):
-        st.warning("💡 **Saran Protein:** Kandungan protein dari menu ini masih agak rendah untuk anak usia pertumbuhan. Bunda bisa menambahkan telur, susu, atau keju pada bekalnya.")
+        st.warning("💡 **Saran Protein:** Jumlah protein menu ini masih agak rendah. Bunda bisa menambahkan lauk hewani seperti telur, ayam, atau segelas susu.")
     else:
-        st.success("✅ **Bagus Sekali!** Kombinasi menu ini memberikan sebaran gizi dan protein yang baik untuk mendukung aktivitas sekolah dan belajar anak hari ini.")
+        st.success("✅ **Bagus Sekali!** Kombinasi menu ini seimbang dan siap memberikan energi yang cukup untuk aktivitas belajarnya.")
 else:
-    st.info("Silakan pilih minimal satu menu makanan di atas untuk memulai simulasi pemenuhan gizi anak.")
+    st.info("Silakan pilih satu atau lebih menu makanan di atas untuk memulai simulasi gizi anak.")
 
 st.markdown("---")
 
-# --- BARIS TAB UNTUK ANALISIS MENDALAM ---
+# --- FITUR 2: BARIS TAB ANALISIS DISTRIBUSI ---
 st.header("📊 Fitur 2: Eksplorasi Kamus Data Gizi Makanan")
-tab_distribusi, tab_produsen = st.tabs(["📈 Analisis Kandungan Zat Gizi", "🏭 Perbandingan Kategori & Produsen"])
+tab_distribusi, tab_kategori = st.tabs(["📈 Analisis Kandungan Zat Gizi", "🏭 Perbandingan Kategori Makanan"])
 
 with tab_distribusi:
-    st.subheader("Melihat Sebaran Nutrisi Makanan di Indonesia")
+    st.subheader("Melihat Sebaran Nutrisi Jajanan Anak")
     pilihan_zat = st.selectbox(
         "Pilih Komponen Zat Gizi:",
-        ['Energi (kkal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
+        ['Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
     )
     
     fig_hist = px.histogram(
         df_makanan,
         x=pilihan_zat,
-        nbins=30,
-        title=f"Grafik Banyaknya Makanan Berdasarkan Kandungan {pilihan_zat}",
+        nbins=25,
+        title=f"Grafik Banyaknya Jenis Makanan Berdasarkan Kandungan {pilihan_zat}",
         color_discrete_sequence=['#4CAF50'],
         marginal="box"
     )
-    fig_hist.update_layout(
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        bargap=0.05
-    )
+    fig_hist.update_layout(plot_bgcolor='white', paper_bgcolor='white', bargap=0.05)
     st.plotly_chart(fig_hist, use_container_width=True)
 
-with tab_produsen:
-    st.subheader("Rata-Rata Kandungan Gizi Berdasarkan Kelompok / Produsen")
-    top_p_idx = df_makanan['Produsen'].value_counts().head(10).index
-    df_top_p = df_makanan[df_makanan['Produsen'].isin(top_p_idx)]
-    df_grouped_p = df_top_p.groupby('Produsen')[['Energi (kkal)', 'Protein (g)', 'Gula (g)']].mean().reset_index()
-    
-    pilihan_urut = st.radio("Urutkan Produsen Berdasarkan Rerata:", ['Energi (kkal)', 'Protein (g)', 'Gula (g)'], horizontal=True)
-    df_grouped_p = df_grouped_p.sort_values(by=pilihan_urut, ascending=False)
-    
-    fig_bar = px.bar(
-        df_grouped_p,
-        x='Produsen',
-        y=pilihan_urut,
-        color=pilihan_urut,
-        title=f"Rata-rata {pilihan_urut} per Kategori Produsen",
-        color_continuous_scale=['#E8F5E9', '#4CAF50', '#1B5E20']
-    )
-    st.plotly_chart(fig_bar, use_container_width=True)
+with tab_kategori:
+    st.subheader("Rata-Rata Kandungan Gizi Berdasarkan Kelompok/Kategori")
+    if 'Kategori' in df_makanan.columns:
+        df_grouped = df_makanan.groupby('Kategori')[['Kalori (kal)', 'Protein (g)', 'Gula (g)']].mean().reset_index()
+        pilihan_urut = st.radio("Urutkan Grafik Berdasarkan:", ['Kalori (kal)', 'Protein (g)', 'Gula (g)'], horizontal=True)
+        df_grouped = df_grouped.sort_values(by=pilihan_urut, ascending=False)
+        
+        fig_bar = px.bar(
+            df_grouped,
+            x='Kategori',
+            y=pilihan_urut,
+            color=pilihan_urut,
+            title=f"Rata-rata Kandungan {pilihan_urut} per Kategori Makanan",
+            color_continuous_scale=['#E8F5E9', '#4CAF50', '#1B5E20']
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.info("Kolom 'Kategori' tidak ditemukan di dataset makanan.")
 
-# --- FITUR 3: TABEL DATA DETAIL LENGKAP ---
+# --- FITUR 3: KAMUS DATA DETAIL LENGKAP ---
 st.markdown("---")
-st.header("🔍 Fitur 3: Kamus Gizi Lengkap (Bisa Dicari)")
-pencarian_bunda = st.text_input("Ketik Nama Makanan di Sini untuk Mencari:", value="", placeholder="Contoh: Susu, Cokelat, Nasi...")
+st.header("🔍 Fitur 3: Kamus Gizi Lengkap Anak")
+pencarian_bunda = st.text_input("Ketik Nama Jajanan/Makanan di sini:", value="", placeholder="Contoh: Alpukat, Permen, Popcorn...")
 
 df_tabel_final = df_makanan.copy()
-if pencarian_bunda:
-    df_tabel_final = df_tabel_final[df_tabel_final['Nama_Makanan'].str.contains(pencarian_bunda, case=False, na=False)]
+if pencarian_bunda and 'Nama' in df_tabel_final.columns:
+    df_tabel_final = df_tabel_final[df_tabel_final['Nama'].str.contains(pencarian_bunda, case=False, na=False)]
 
-kolom_ortu = ['Nama_Makanan', 'Produsen', 'Porsi', 'Energi (kkal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
-st.dataframe(df_tabel_final[kolom_ortu], use_container_width=True)
+kolom_tampil = [c for c in ['Nama', 'Kategori', 'Takaran Porsi', 'Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)'] if c in df_tabel_final.columns]
+st.dataframe(df_tabel_final[kolom_tampil], use_container_width=True)
