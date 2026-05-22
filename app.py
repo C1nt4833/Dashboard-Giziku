@@ -58,6 +58,10 @@ def load_all_data():
     url_akg = "https://raw.githubusercontent.com/C1nt4833/giziku-etl/main/akg_indonesia_final.csv"
     df_akg = pd.read_csv(url_akg)
     
+    # --- STANDARISASI KOLOM AKG AGAR BEBAS KEYERROR ---
+    # Menghapus spasi di awal/akhir nama kolom dan mengubahnya ke huruf kecil semua
+    df_akg.columns = df_akg.columns.str.strip().str.lower()
+    
     return df_makanan, df_akg
 
 try:
@@ -73,25 +77,35 @@ st.sidebar.image("https://img.icons8.com/color/96/children.png", width=80)
 st.sidebar.title("💚 Profil Buah Hati")
 st.sidebar.markdown("Sesuaikan pilihan di bawah dengan profil anak Anda untuk melihat rekomendasi porsi.")
 
-# Menentukan pilihan Jenis Kelamin langsung dari data gambar Anda
+# Menentukan pilihan Jenis Kelamin 
 list_gender = ['Laki-laki', 'Perempuan']
 selected_gender = st.sidebar.radio("Jenis Kelamin Anak:", list_gender)
 
-# Menyaring pilihan Usia Anak agar pas dengan data gambar Anda yang pakai tanda kurung ()
-# dan membatasinya hanya untuk rentang anak usia sekolah (6-12 tahun) saja.
+# Menyaring pilihan Usia Anak agar pas dengan tanda kurung sesuai gambar data Anda
 usia_anak_target = ['Anak (7-9 tahun)', 'Anak (10-12 tahun)']
 selected_usia = st.sidebar.selectbox("Rentang Usia Anak:", usia_anak_target)
 
-# Mengambil limit AKG berdasarkan input (Sesuai nama kolom di gambar Anda)
-user_akg = df_akg[(df_akg['Jenis Kelamin'] == selected_gender) & (df_akg['Kelompok Usia'] == selected_usia)]
+# Menerapkan filter berdasarkan nama kolom yang sudah distandarisasi (huruf kecil semua tanpa spasi)
+# 'jenis kelamin' menjadi 'jenis kelamin', 'kelompok usia' menjadi 'kelompok usia'
+df_akg_filtered = df_akg[
+    (df_akg['jenis kelamin'].str.strip() == selected_gender) & 
+    (df_akg['kelompok usia'].str.strip() == selected_usia)
+]
 
-if not user_akg.empty:
-    limit_energi = float(user_akg['Energi (kkal)'].values[0])
-    limit_protein = float(user_akg['Protein (g)'].values[0])
-    limit_karbo = float(user_akg['Karbohidrat (g)'].values[0])
-    limit_lemak = float(user_akg['Lemak (g)'].values[0])
+# Ambil batasan nilai gizi dari data yang sudah terfilter
+if not df_akg_filtered.empty:
+    # Cari nama kolom gizi yang mengandung teks terkait secara dinamis (antisipasi huruf kecil)
+    col_e = [c for c in df_akg.columns if 'energi' in c or 'kalori' in c][0]
+    col_p = [c for c in df_akg.columns if 'protein' in c][0]
+    col_k = [c for c in df_akg.columns if 'karbo' in c][0]
+    col_l = [c for c in df_akg.columns if 'lemak' in c][0]
+    
+    limit_energi = float(df_akg_filtered[col_e].values[0])
+    limit_protein = float(df_akg_filtered[col_p].values[0])
+    limit_karbo = float(df_akg_filtered[col_k].values[0])
+    limit_lemak = float(df_akg_filtered[col_l].values[0])
 else:
-    # Angka aman cadangan jika pencarian meleset
+    # Angka aman cadangan umum anak sekolah dasar jika filter meleset
     limit_energi, limit_protein, limit_karbo, limit_lemak = 1800.0, 45.0, 250.0, 55.0
 
 # Tampilan Kuota Gizi Anak yang Bersih dan Berwarna Hijau Lembut
