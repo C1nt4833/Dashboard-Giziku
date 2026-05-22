@@ -37,30 +37,57 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. MEMUAT DATASET (DENGAN CACHING & AUTO-SEPARATOR)
+# 2. MEMUAT DATASET (DENGAN CACHING & NORMALISASI KOLOM)
 # ==========================================
 @st.cache_data
 def load_all_data():
-    # 2a. Memuat Data Gizi Makanan Anak (Diberi pelindung auto-separator)
+    # 2a. Memuat Data Gizi Makanan Anak
     url_makanan = "https://raw.githubusercontent.com/ekasaaa/analisis-dataset-gizi/refs/heads/main/nilai-gizi.csv"
     
-    # Menggunakan sep=None dan engine='python' agar Pandas otomatis mendeteksi pembatas koma/titik-koma
-    # dan tidak error jika ada tanda koma di dalam teks nama makanan
+    # Deteksi otomatis pembatas data (koma / titik-koma) dan lompati baris rusak
     df_makanan = pd.read_csv(url_makanan, sep=None, engine='python', on_bad_lines='skip')
-    df_makanan.columns = df_makanan.columns.str.strip()
+    df_makanan.columns = df_makanan.columns.str.strip().str.replace('﻿', '')
     
-    # Bersihkan kolom gizi utama dari teks tak bernilai jika tipenya objek/string
-    kolom_gizi = ['Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
-    for col in kolom_gizi:
-        if col in df_makanan.columns:
-            if df_makanan[col].dtype == 'object':
-                df_makanan[col] = df_makanan[col].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float)
-            df_makanan[col] = pd.to_numeric(df_makanan[col], errors='coerce').fillna(0)
+    # --- PROSES NORMALISASI NAMA KOLOM (STANDARISASI DINAMIS) ---
+    # Mencari nama kolom secara fleksibel berdasarkan kemiripan teks kata kunci
+    kolom_nama = [c for c in df_makanan.columns if 'nama' in c.lower() or 'food' in c.lower()]
+    kolom_kalori = [c for c in df_makanan.columns if 'kalori' in c.lower() or 'energi' in c.lower() or 'kal' in c.lower()]
+    kolom_protein = [c for c in df_makanan.columns if 'protein' in c.lower()]
+    kolom_karbo = [c for c in df_makanan.columns if 'karbo' in c.lower()]
+    kolom_lemak = [c for c in df_makanan.columns if 'lemak' in c.lower() or 'fat' in c.lower() and 'jenuh' not in c.lower() and 'tunggal' not in c.lower()]
+    kolom_gula = [c for c in df_makanan.columns if 'gula' in c.lower() or 'sugar' in c.lower()]
+    kolom_kategori = [c for c in df_makanan.columns if 'kategori' in c.lower() or 'type' in c.lower() or 'jenis' in c.lower()]
+    kolom_porsi = [c for c in df_makanan.columns if 'porsi' in c.lower() or 'takaran' in c.lower() or 'serving' in c.lower()]
+
+    # Tentukan nama pemetaan ulang yang seragam untuk seluruh isi aplikasi
+    mapping = {}
+    if kolom_nama: mapping[kolom_nama[0]] = 'Nama Makanan'
+    if kolom_kalori: mapping[kolom_kalori[0]] = 'Kalori (kal)'
+    if kolom_protein: mapping[kolom_protein[0]] = 'Protein (g)'
+    if kolom_karbo: mapping[kolom_karbo[0]] = 'Karbohidrat (g)'
+    if kolom_lemak: mapping[kolom_lemak[0]] = 'Lemak (g)'
+    if kolom_gula: mapping[kolom_gula[0]] = 'Gula (g)'
+    if kolom_kategori: mapping[kolom_kategori[0]] = 'Kategori'
+    if kolom_porsi: mapping[kolom_porsi[0]] = 'Takaran Porsi'
+    
+    df_makanan = df_makanan.rename(columns=mapping)
+    
+    # Pastikan kolom standar minimal wajib ada jika renaming gagal total karena file kosong
+    for col in ['Nama Makanan', 'Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)', 'Kategori', 'Takaran Porsi']:
+        if col not in df_makanan.columns:
+            df_makanan[col] = 0 if col != 'Nama Makanan' and col != 'Kategori' and col != 'Takaran Porsi' else "Tidak Diketahui"
+
+    # Bersihkan nilai sel kolom gizi dari teks agar menjadi angka murni (Float)
+    kolom_gizi_wajib = ['Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
+    for col in kolom_gizi_wajib:
+        if df_makanan[col].dtype == 'object':
+            df_makanan[col] = df_makanan[col].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float)
+        df_makanan[col] = pd.to_numeric(df_makanan[col], errors='coerce').fillna(0)
             
     # 2b. Memuat Data Standar AKG
     url_akg = "https://raw.githubusercontent.com/C1nt4833/giziku-etl/main/akg_indonesia_final.csv"
     df_akg = pd.read_csv(url_akg, sep=None, engine='python', on_bad_lines='skip')
-    df_akg.columns = df_akg.columns.str.strip()
+    df_akg.columns = df_akg.columns.str.strip().str.replace('﻿', '')
     
     return df_makanan, df_akg
 
@@ -100,7 +127,6 @@ if not df_akg_filtered.empty:
     limit_karbo = float(pd.to_numeric(df_akg_filtered['Karbohidrat (g)'].values[0], errors='coerce'))
     limit_lemak = float(pd.to_numeric(df_akg_filtered['Lemak (g)'].values[0], errors='coerce'))
 else:
-    # Angka fallback standar anak sekolah dasar jika filter kosong
     limit_energi, limit_protein, limit_karbo, limit_lemak = 1650.0, 40.0, 250.0, 55.0
 
 # Box info kebutuhan harian anak di sidebar
@@ -127,11 +153,11 @@ st.markdown("*Bunda bisa memilih satu atau beberapa makanan yang dimakan anak ha
 
 pilihan_makanan_ortu = st.multiselect(
     "Pilih makanan/jajanan yang dikonsumsi anak hari ini:",
-    options=df_makanan['Nama'].unique() if 'Nama' in df_makanan.columns else df_makanan.iloc[:,0].unique(),
+    options=df_makanan['Nama Makanan'].unique(),
     default=[]
 )
 
-df_selected_menu = df_makanan[df_makanan['Nama'].isin(pilihan_makanan_ortu)] if 'Nama' in df_makanan.columns else pd.DataFrame()
+df_selected_menu = df_makanan[df_makanan['Nama Makanan'].isin(pilihan_makanan_ortu)]
 
 if not df_selected_menu.empty:
     total_energi = float(df_selected_menu['Kalori (kal)'].sum())
@@ -166,16 +192,18 @@ else:
 st.markdown("---")
 
 # --- FITUR 2: BARIS TAB ANALISIS DISTRIBUSI ---
-st.header("📊 Fitur 2: Eksplorasi Kamus Data Gizi Makanan")
+st.header("📊 Fitur 2: : Eksplorasi Kamus Data Gizi Makanan")
 tab_distribusi, tab_kategori = st.tabs(["📈 Analisis Kandungan Zat Gizi", "🏭 Perbandingan Kategori Makanan"])
 
 with tab_distribusi:
     st.subheader("Melihat Sebaran Nutrisi Jajanan Anak")
     pilihan_zat = st.selectbox(
         "Pilih Komponen Zat Gizi:",
-        ['Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
+        ['Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)'],
+        key="sb_zat"
     )
     
+    # Plotly dijamin aman karena nama kolom pilihan_zat sudah dipaksa ada di Bagian 2
     fig_hist = px.histogram(
         df_makanan,
         x=pilihan_zat,
@@ -189,8 +217,10 @@ with tab_distribusi:
 
 with tab_kategori:
     st.subheader("Rata-Rata Kandungan Gizi Berdasarkan Kelompok/Kategori")
-    if 'Kategori' in df_makanan.columns:
-        df_grouped = df_makanan.groupby('Kategori')[['Kalori (kal)', 'Protein (g)', 'Gula (g)']].mean().reset_index()
+    df_valid_kategori = df_makanan[df_makanan['Kategori'] != "Tidak Diketahui"]
+    
+    if not df_valid_kategori.empty and len(df_valid_kategori['Kategori'].unique()) > 1:
+        df_grouped = df_valid_kategori.groupby('Kategori')[['Kalori (kal)', 'Protein (g)', 'Gula (g)']].mean().reset_index()
         pilihan_urut = st.radio("Urutkan Grafik Berdasarkan:", ['Kalori (kal)', 'Protein (g)', 'Gula (g)'], horizontal=True)
         df_grouped = df_grouped.sort_values(by=pilihan_urut, ascending=False)
         
@@ -204,7 +234,7 @@ with tab_kategori:
         )
         st.plotly_chart(fig_bar, use_container_width=True)
     else:
-        st.info("Kolom 'Kategori' tidak ditemukan di dataset makanan.")
+        st.info("Kategori makanan tunggal atau tidak ditemukan.")
 
 # --- FITUR 3: KAMUS DATA DETAIL LENGKAP ---
 st.markdown("---")
@@ -212,8 +242,8 @@ st.header("🔍 Fitur 3: Kamus Gizi Lengkap Anak")
 pencarian_bunda = st.text_input("Ketik Nama Jajanan/Makanan di sini:", value="", placeholder="Contoh: Alpukat, Permen, Popcorn...")
 
 df_tabel_final = df_makanan.copy()
-if pencarian_bunda and 'Nama' in df_tabel_final.columns:
-    df_tabel_final = df_tabel_final[df_tabel_final['Nama'].str.contains(pencarian_bunda, case=False, na=False)]
+if pencarian_bunda:
+    df_tabel_final = df_tabel_final[df_tabel_final['Nama Makanan'].str.contains(pencarian_bunda, case=False, na=False)]
 
-kolom_tampil = [c for c in ['Nama', 'Kategori', 'Takaran Porsi', 'Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)'] if c in df_tabel_final.columns]
+kolom_tampil = ['Nama Makanan', 'Kategori', 'Takaran Porsi', 'Kalori (kal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
 st.dataframe(df_tabel_final[kolom_tampil], use_container_width=True)
