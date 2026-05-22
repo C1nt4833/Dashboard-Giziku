@@ -105,7 +105,7 @@ st.markdown("Selamat datang Ayah & Bunda! Dashboard ini dirancang khusus untuk m
 st.markdown("---")
 
 # --- FITUR 1: KALKULATOR MENU HARIAN ---
-st.header("🛒 Fitur 1: Hitung Porsi & Gizi Jajanan Hari Ini")
+st.header("🛒 Hitung Porsi & Gizi Jajanan Hari Ini")
 st.markdown("*Pilih satu atau beberapa makanan yang dikonsumsi anak hari ini untuk melihat apakah energinya cukup:*")
 
 pilihan_makanan_ortu = st.multiselect(
@@ -148,7 +148,7 @@ else:
 st.markdown("---")
 
 # --- FITUR 2: GRAFIK PANDUAN JAJANAN SEHAT ---
-st.header("📊 Fitur 2: Panduan Memilih Kelompok Jajanan Sehat")
+st.header("📊 Panduan Memilih Kelompok Jajanan Sehat")
 tab_distribusi, tab_kategori = st.tabs(["📈 Analisis Sebaran Zat Gizi", "🏭 Perbandingan Kategori Makanan"])
 
 with tab_distribusi:
@@ -199,7 +199,7 @@ with tab_kategori:
 
 # --- FITUR 3: KAMUS DETAIL LENGKAP ---
 st.markdown("---")
-st.header("🔍 Fitur 3: Kamus Gizi Lengkap Makanan Anak")
+st.header("🔍 Kamus Gizi Lengkap Makanan Anak")
 st.markdown("Bunda ingin tahu kandungan gizi detail dari suatu makanan? Cukup ketik namanya di bawah ini:")
 
 pencarian_bunda = st.text_input("Ketik nama makanan di sini (Contoh: Biskuit, Susu, Pisang):", value="", placeholder="Cari makanan...")
