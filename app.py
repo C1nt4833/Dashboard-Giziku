@@ -54,13 +54,12 @@ def load_all_data():
             df_makanan[col] = df_makanan[col].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float)
             df_makanan[col] = df_makanan[col].fillna(df_makanan[col].median())
             
-    # Data Standar AKG
+    # Data Standar AKG (Menggunakan dataset asli Anda)
     url_akg = "https://raw.githubusercontent.com/C1nt4833/giziku-etl/main/akg_indonesia_final.csv"
     df_akg = pd.read_csv(url_akg)
     
-    # --- SOLUSI MUTLAK MASALAH BOM CHARACTER ---
-    # Membersihkan karakter aneh tersembunyi (BOM) dan spasi di semua nama kolom
-    df_akg.columns = df_akg.columns.str.replace('﻿', '').str.strip()
+    # Bersihkan spasi atau karakter aneh bawaan pada nama kolom jika ada
+    df_akg.columns = df_akg.columns.str.strip()
     
     return df_makanan, df_akg
 
@@ -77,27 +76,36 @@ st.sidebar.image("https://img.icons8.com/color/96/children.png", width=80)
 st.sidebar.title("💚 Profil Buah Hati")
 st.sidebar.markdown("Sesuaikan pilihan di bawah dengan profil anak Anda untuk melihat rekomendasi porsi.")
 
-# Pilihan input untuk orang tua di browser
+# Input Pilihan Orang Tua
 selected_gender = st.sidebar.radio("Jenis Kelamin Anak:", ['Laki-laki', 'Perempuan'])
 selected_usia = st.sidebar.selectbox("Rentang Usia Anak:", ['Anak (7-9 tahun)', 'Anak (10-12 tahun)'])
 
-# Filter data AKG (Nama kolom sudah bersih & sesuai df.info() Anda)
-df_akg_filtered = df_akg[
-    (df_akg['Jenis Kelamin'].astype(str).str.strip() == selected_gender) & 
-    (df_akg['Kelompok Usia'].astype(str).str.strip() == selected_usia)
-]
+# --- LOGIKA FILTER SESUAI STRUKTUR CSV ASLI ---
+if selected_usia == 'Anak (7-9 tahun)':
+    # Di dataset Anda, usia 7-9 tahun masuk Kategori 'Bayi/Anak'
+    df_akg_filtered = df_akg[
+        (df_akg['Kategori'] == 'Bayi/Anak') & 
+        (df_akg['Label_Umur_Kondisi'].str.contains('7-9'))
+    ]
+else:
+    # Usia 10-12 tahun terbagi berdasarkan jenis kelamin 'Laki-Laki' atau 'Perempuan'
+    kategori_target = 'Laki-Laki' if selected_gender == 'Laki-laki' else 'Perempuan'
+    df_akg_filtered = df_akg[
+        (df_akg['Kategori'] == kategori_target) & 
+        (df_akg['Label_Umur_Kondisi'].str.contains('10-12'))
+    ]
 
-# Mengambil nilai limit zat gizi berdasarkan filter
+# Mengambil nilai batas AKG harian dari baris yang berhasil difilter
 if not df_akg_filtered.empty:
     limit_energi = float(df_akg_filtered['Energi (kkal)'].values[0])
     limit_protein = float(df_akg_filtered['Protein (g)'].values[0])
     limit_karbo = float(df_akg_filtered['Karbohidrat (g)'].values[0])
     limit_lemak = float(df_akg_filtered['Lemak (g)'].values[0])
 else:
-    # Fallback angka aman jika ada ketidakcocokan teks baris data hantu
+    # Angka standar darurat jika terjadi kegagalan sistem membaca file
     limit_energi, limit_protein, limit_karbo, limit_lemak = 1800.0, 45.0, 250.0, 55.0
 
-# Tampilan Kuota Gizi Anak yang Bersih dan Berwarna Hijau Lembut
+# Tampilan Kuota Gizi Harian Anak di Sidebar
 st.sidebar.markdown(f"""
 <div style="background-color: #E8F5E9; padding: 15px; border-radius: 10px; border-left: 5px solid #2E7D32;">
 <b style="color: #1B5E20;">🎯 Kebutuhan Harian Anak:</b><br/>
