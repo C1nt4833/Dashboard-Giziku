@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 
 # ==========================================
@@ -31,10 +32,6 @@ st.markdown("""
         color: #1B5E20 !important;
         border-bottom-color: #1B5E20 !important;
     }
-    /* Kotak Informasi Hijau Lembut */
-    .reportview-container .main .block-container{
-        padding-top: 2rem;
-    }
     h1, h2, h3 {
         color: #1B5E20 !important;
     }
@@ -42,7 +39,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. MEMUAT DATASET
+# 2. MEMUAT DATASET (DENGAN CACHING)
 # ==========================================
 @st.cache_data
 def load_all_data():
@@ -66,24 +63,26 @@ def load_all_data():
 try:
     df_makanan, df_akg = load_all_data()
 except Exception as e:
-    st.error(f"Gagal memuat data: {e}")
+    st.error(f"Gagal memuat data dari GitHub: {e}")
     st.stop()
 
 # ==========================================
-# 3. SIDEBAR: KHUSUS PROFIL ANAK (6-12 TAHUN)
+# 3. SIDEBAR: PROFIL ANAK KHUSUS 6-12 TAHUN
 # ==========================================
 st.sidebar.image("https://img.icons8.com/color/96/children.png", width=80)
 st.sidebar.title("💚 Profil Buah Hati")
 st.sidebar.markdown("Sesuaikan pilihan di bawah dengan profil anak Anda untuk melihat rekomendasi porsi.")
 
-# Memfilter data AKG khusus hanya untuk rentang anak usia 6-12 tahun saja
-usia_anak_target = ['Anak 7-9 tahun', 'Anak 10-12 tahun'] 
-# Catatan: Jika di data Anda ada kategori usia 6 tahun (misal masuk ke Balita/Anak), silakan sesuaikan string-nya.
+# Menentukan pilihan Jenis Kelamin langsung dari data gambar Anda
+list_gender = ['Laki-laki', 'Perempuan']
+selected_gender = st.sidebar.radio("Jenis Kelamin Anak:", list_gender)
 
-selected_gender = st.sidebar.radio("Jenis Kelamin Anak:", ['Laki-laki', 'Perempuan'])
+# Menyaring pilihan Usia Anak agar pas dengan data gambar Anda yang pakai tanda kurung ()
+# dan membatasinya hanya untuk rentang anak usia sekolah (6-12 tahun) saja.
+usia_anak_target = ['Anak (7-9 tahun)', 'Anak (10-12 tahun)']
 selected_usia = st.sidebar.selectbox("Rentang Usia Anak:", usia_anak_target)
 
-# Mengambil limit AKG berdasarkan input
+# Mengambil limit AKG berdasarkan input (Sesuai nama kolom di gambar Anda)
 user_akg = df_akg[(df_akg['Jenis Kelamin'] == selected_gender) & (df_akg['Kelompok Usia'] == selected_usia)]
 
 if not user_akg.empty:
@@ -92,10 +91,10 @@ if not user_akg.empty:
     limit_karbo = float(user_akg['Karbohidrat (g)'].values[0])
     limit_lemak = float(user_akg['Lemak (g)'].values[0])
 else:
-    # Antisipasi fallback aman rata-rata anak sekolah dasar
+    # Angka aman cadangan jika pencarian meleset
     limit_energi, limit_protein, limit_karbo, limit_lemak = 1800.0, 45.0, 250.0, 55.0
 
-# Tampilan Kuota Gizi Anak yang Bersih
+# Tampilan Kuota Gizi Anak yang Bersih dan Berwarna Hijau Lembut
 st.sidebar.markdown(f"""
 <div style="background-color: #E8F5E9; padding: 15px; border-radius: 10px; border-left: 5px solid #2E7D32;">
 <b style="color: #1B5E20;">🎯 Kebutuhan Harian Anak:</b><br/>
@@ -117,7 +116,6 @@ st.markdown("---")
 st.header("🛒 Fitur 1: Simulasi Menu Makan & Jajanan Anak")
 st.markdown("*Bunda bisa memilih satu atau beberapa makanan yang dimakan anak hari ini untuk melihat apakah gizinya sudah tercukupi atau justru berlebihan.*")
 
-# Pilihan multi-select menu makanan yang ramah untuk dicari orang tua
 pilihan_makanan_ortu = st.multiselect(
     "Pilih makanan/jajanan yang dikonsumsi anak hari ini:",
     options=df_makanan['Nama_Makanan'].unique(),
@@ -127,18 +125,15 @@ pilihan_makanan_ortu = st.multiselect(
 df_selected_menu = df_makanan[df_makanan['Nama_Makanan'].isin(pilihan_makanan_ortu)]
 
 if not df_selected_menu.empty:
-    # Hitung total nutrisi dari semua makanan yang dipilih orang tua
     total_energi = df_selected_menu['Energi (kkal)'].sum()
     total_protein = df_selected_menu['Protein (g)'].sum()
     total_karbo = df_selected_menu['Karbohidrat (g)'].sum()
     total_lemak = df_selected_menu['Lemak (g)'].sum()
     total_gula = df_selected_menu['Gula (g)'].sum()
     
-    # Hitung persentase terhadap AKG anak saat ini
     pct_energi = (total_energi / limit_energi) * 100
     pct_protein = (total_protein / limit_protein) * 100
     
-    # Tampilkan Ringkasan Berwarna Hijau-Putih Menggunakan Metrik Card
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
         st.metric("Total Kalori Masuk", f"{total_energi:.1f} kkal", f"{pct_energi:.1f}% Kebutuhan Harian")
@@ -149,7 +144,6 @@ if not df_selected_menu.empty:
     with col_m4:
         st.metric("Jumlah Item Makanan", f"{len(df_selected_menu)} Menu")
 
-    # Sistem Peringatan Pintar Otomatis (Smart Alert System) untuk Orang Tua
     st.markdown("#### 💡 Catatan & Evaluasi Gizi Bekal/Jajanan Anak:")
     if total_gula > 25:
         st.error("⚠️ **Peringatan Gula:** Makanan yang dipilih mengandung gula tinggi (lebih dari 25 gram). Kurangi jajanan manis hari ini untuk mencegah anak terlalu hiperaktif dan menjaga kesehatan gigi!")
@@ -166,17 +160,13 @@ st.markdown("---")
 st.header("📊 Fitur 2: Eksplorasi Kamus Data Gizi Makanan")
 tab_distribusi, tab_produsen = st.tabs(["📈 Analisis Kandungan Zat Gizi", "🏭 Perbandingan Kategori & Produsen"])
 
-# TAB 1: Distribusi Gizi Interaktif
 with tab_distribusi:
     st.subheader("Melihat Sebaran Nutrisi Makanan di Indonesia")
-    st.markdown("Gunakan grafik ini untuk melihat zat gizi mana yang paling mendominasi di pasaran.")
-    
     pilihan_zat = st.selectbox(
         "Pilih Komponen Zat Gizi:",
         ['Energi (kkal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
     )
     
-    # Histogram interaktif dengan warna Hijau (Hex: #4CAF50)
     fig_hist = px.histogram(
         df_makanan,
         x=pilihan_zat,
@@ -192,12 +182,8 @@ with tab_distribusi:
     )
     st.plotly_chart(fig_hist, use_container_width=True)
 
-# TAB 2: Komparasi Produsen Makanan Masakan Anak
 with tab_produsen:
     st.subheader("Rata-Rata Kandungan Gizi Berdasarkan Kelompok / Produsen")
-    st.markdown("Membantu orang tua mengetahui kategori masakan dari produsen mana yang memiliki kalori atau gula paling tinggi.")
-    
-    # Top 10 kelompok produsen terbanyak
     top_p_idx = df_makanan['Produsen'].value_counts().head(10).index
     df_top_p = df_makanan[df_makanan['Produsen'].isin(top_p_idx)]
     df_grouped_p = df_top_p.groupby('Produsen')[['Energi (kkal)', 'Protein (g)', 'Gula (g)']].mean().reset_index()
@@ -210,23 +196,19 @@ with tab_produsen:
         x='Produsen',
         y=pilihan_urut,
         color=pilihan_urut,
-        title=f"Rerata {pilihan_urut} per Kategori Produsen",
-        color_continuous_scale=['#E8F5E9', '#4CAF50', '#1B5E20'] # Gradasi Hijau Putih Gelap
+        title=f"Rata-rata {pilihan_urut} per Kategori Produsen",
+        color_continuous_scale=['#E8F5E9', '#4CAF50', '#1B5E20']
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-# --- FITUR 3: TABEL DATA DETAIL YANG MUDAH DICARI ---
+# --- FITUR 3: TABEL DATA DETAIL LENGKAP ---
 st.markdown("---")
 st.header("🔍 Fitur 3: Kamus Gizi Lengkap (Bisa Dicari)")
-st.markdown("Bunda tinggal mengetik kata kunci makanan (misal: *'Susu'*, *'Biskuit'*, *'Roti'*) di bawah untuk melihat nilai aslinya.")
-
-# Kolom pencarian teks langsung di atas tabel data
 pencarian_bunda = st.text_input("Ketik Nama Makanan di Sini untuk Mencari:", value="", placeholder="Contoh: Susu, Cokelat, Nasi...")
 
 df_tabel_final = df_makanan.copy()
 if pencarian_bunda:
     df_tabel_final = df_tabel_final[df_tabel_final['Nama_Makanan'].str.contains(pencarian_bunda, case=False, na=False)]
 
-# Tampilkan tabel yang bersih
 kolom_ortu = ['Nama_Makanan', 'Produsen', 'Porsi', 'Energi (kkal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
 st.dataframe(df_tabel_final[kolom_ortu], use_container_width=True)
