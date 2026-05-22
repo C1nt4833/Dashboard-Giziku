@@ -1,218 +1,232 @@
-import streamlit as strl
+import streamlit as st
 import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
+import plotly.express as px
 
 # ==========================================
-# KONFIGURASI HALAMAN DASHBOARD
+# 1. KONFIGURASI HALAMAN & TEMA WARNA (KUSTOM CSS)
 # ==========================================
-strl.set_page_config(
-    page_title="Dashboard Analisis Gizi & AKG",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
+st.set_page_config(
+    page_title="Giziku Anak - Panduan Gizi Orang Tua",
+    page_icon="👦",
+    layout="wide"
 )
 
-# Set style visualisasi agar serasi dengan Streamlit (Dark/Light mode adaptive)
-sns.set_theme(style="whitegrid")
+# Kustom CSS untuk memaksa tema warna dominan Hijau & Putih murni yang bersih
+st.markdown("""
+    <style>
+    /* Mengubah warna latar belakang utama dan teks */
+    .stApp {
+        background-color: #FFFFFF;
+        color: #2E7D32;
+    }
+    /* Mengubah gaya tombol dan navigasi */
+    .stTabs [data-baseweb="tab"] {
+        color: #4CAF50;
+        font-weight: bold;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #2E7D32;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #1B5E20 !important;
+        border-bottom-color: #1B5E20 !important;
+    }
+    /* Kotak Informasi Hijau Lembut */
+    .reportview-container .main .block-container{
+        padding-top: 2rem;
+    }
+    h1, h2, h3 {
+        color: #1B5E20 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ==========================================
-# LOAD DATASET (DENGAN CACHING AGAR CEPAT)
+# 2. MEMUAT DATASET
 # ==========================================
-@strl.cache_data
-def load_data_makanan():
-    try:
-        return pd.read_csv('EDA_Data_Makanan_Anak.csv')
-    except:
-        return None
+@st.cache_data
+def load_all_data():
+    # Data Gizi Makanan
+    url_makanan = "https://raw.githubusercontent.com/ekasaaa/analisis-dataset-gizi/refs/heads/main/nilai-gizi.csv"
+    df_makanan = pd.read_csv(url_makanan, sep=";")
+    
+    df_makanan.drop(df_makanan.columns[df_makanan.columns.str.contains('unnamed', case=False)], axis=1, inplace=True)
+    kolom_gizi = ['Energi (kkal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)']
+    for col in kolom_gizi:
+        if df_makanan[col].dtype == 'object':
+            df_makanan[col] = df_makanan[col].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float)
+            df_makanan[col] = df_makanan[col].fillna(df_makanan[col].median())
+            
+    # Data Standar AKG
+    url_akg = "https://raw.githubusercontent.com/C1nt4833/giziku-etl/main/akg_indonesia_final.csv"
+    df_akg = pd.read_csv(url_akg)
+    
+    return df_makanan, df_akg
 
-@strl.cache_data
-def load_data_akg():
-    try:
-        return pd.read_csv('dataset_akg_final.csv')
-    except:
-        return None
-
-df_makanan = load_data_makanan()
-df_akg = load_data_akg()
+try:
+    df_makanan, df_akg = load_all_data()
+except Exception as e:
+    st.error(f"Gagal memuat data: {e}")
+    st.stop()
 
 # ==========================================
-# SIDEBAR NAVIGATION
+# 3. SIDEBAR: KHUSUS PROFIL ANAK (6-12 TAHUN)
 # ==========================================
-strl.sidebar.title("📌 Menu Navigasi")
-menu_pilihan = strl.sidebar.radio(
-    "Pilih Menu Analisis:",
-    ["Halaman Utama / Beranda", "1. Dashboard Makanan Anak", "2. Dashboard Standar AKG"]
+st.sidebar.image("https://img.icons8.com/color/96/children.png", width=80)
+st.sidebar.title("💚 Profil Buah Hati")
+st.sidebar.markdown("Sesuaikan pilihan di bawah dengan profil anak Anda untuk melihat rekomendasi porsi.")
+
+# Memfilter data AKG khusus hanya untuk rentang anak usia 6-12 tahun saja
+usia_anak_target = ['Anak 7-9 tahun', 'Anak 10-12 tahun'] 
+# Catatan: Jika di data Anda ada kategori usia 6 tahun (misal masuk ke Balita/Anak), silakan sesuaikan string-nya.
+
+selected_gender = st.sidebar.radio("Jenis Kelamin Anak:", ['Laki-laki', 'Perempuan'])
+selected_usia = st.sidebar.selectbox("Rentang Usia Anak:", usia_anak_target)
+
+# Mengambil limit AKG berdasarkan input
+user_akg = df_akg[(df_akg['Jenis Kelamin'] == selected_gender) & (df_akg['Kelompok Usia'] == selected_usia)]
+
+if not user_akg.empty:
+    limit_energi = float(user_akg['Energi (kkal)'].values[0])
+    limit_protein = float(user_akg['Protein (g)'].values[0])
+    limit_karbo = float(user_akg['Karbohidrat (g)'].values[0])
+    limit_lemak = float(user_akg['Lemak (g)'].values[0])
+else:
+    # Antisipasi fallback aman rata-rata anak sekolah dasar
+    limit_energi, limit_protein, limit_karbo, limit_lemak = 1800.0, 45.0, 250.0, 55.0
+
+# Tampilan Kuota Gizi Anak yang Bersih
+st.sidebar.markdown(f"""
+<div style="background-color: #E8F5E9; padding: 15px; border-radius: 10px; border-left: 5px solid #2E7D32;">
+<b style="color: #1B5E20;">🎯 Kebutuhan Harian Anak:</b><br/>
+• 🔋 <b>Energi:</b> {limit_energi:.0f} kkal<br/>
+• 🥩 <b>Protein:</b> {limit_protein:.0f} g<br/>
+• 🍞 <b>Karbohidrat:</b> {limit_karbo:.0f} g<br/>
+• 🥑 <b>Lemak:</b> {limit_lemak:.0f} g
+</div>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 4. HALAMAN UTAMA DASHBOARD
+# ==========================================
+st.title("👦 Dashboard Giziku Anak Sekolah (Usia 6-12 Tahun)")
+st.markdown("Membantu Ayah & Bunda memantau nutrisi makanan, bekal sekolah, dan jajanan harian anak demi tumbuh kembang yang optimal.")
+st.markdown("---")
+
+# --- FITUR INTERAKTIF UTAMA: PANDUAN MENU HARIAN ANAK ---
+st.header("🛒 Fitur 1: Simulasi Menu Makan & Jajanan Anak")
+st.markdown("*Bunda bisa memilih satu atau beberapa makanan yang dimakan anak hari ini untuk melihat apakah gizinya sudah tercukupi atau justru berlebihan.*")
+
+# Pilihan multi-select menu makanan yang ramah untuk dicari orang tua
+pilihan_makanan_ortu = st.multiselect(
+    "Pilih makanan/jajanan yang dikonsumsi anak hari ini:",
+    options=df_makanan['Nama_Makanan'].unique(),
+    default=[df_makanan['Nama_Makanan'].iloc[0]] if len(df_makanan) > 0 else None
 )
 
-strl.sidebar.markdown("---")
-strl.sidebar.markdown("💡 *Tips: Gunakan filter di setiap halaman untuk melihat data secara spesifik.*")
+df_selected_menu = df_makanan[df_makanan['Nama_Makanan'].isin(pilihan_makanan_ortu)]
 
-# ==========================================
-# HALAMAN 1: BERANDA
-# ==========================================
-if menu_pilihan == "Halaman Utama / Beranda":
-    strl.title("📊 Platform Dashboard Analisis Gizi & Kebutuhan AKG")
-    strl.subheader("Selamat Datang di Aplikasi Dashboard Interaktif")
+if not df_selected_menu.empty:
+    # Hitung total nutrisi dari semua makanan yang dipilih orang tua
+    total_energi = df_selected_menu['Energi (kkal)'].sum()
+    total_protein = df_selected_menu['Protein (g)'].sum()
+    total_karbo = df_selected_menu['Karbohidrat (g)'].sum()
+    total_lemak = df_selected_menu['Lemak (g)'].sum()
+    total_gula = df_selected_menu['Gula (g)'].sum()
     
-    strl.write("""
-    Aplikasi ini dirancang untuk menyajikan visualisasi data hasil Exploratory Data Analysis (EDA) secara interaktif. 
-    Terdapat dua fokus utama analisis yang dapat Anda jelajahi melalui menu di samping kiri:
-    """)
+    # Hitung persentase terhadap AKG anak saat ini
+    pct_energi = (total_energi / limit_energi) * 100
+    pct_protein = (total_protein / limit_protein) * 100
     
-    col1, col2 = strl.columns(2)
-    with col1:
-        strl.info("### 🥦 1. Dashboard Makanan Anak\nFokus pada profil nutrisi produk makanan anak, mendeteksi kandungan gula/kalori ekstrem, korelasi zat gizi, dan variasi distribusinya.")
-    with col2:
-        strl.success("### 📋 2. Dashboard Standar AKG\nFokus pada pola kebutuhan gizi harian (Energi, Protein, Lemak, Karbohidrat) berdasarkan kelompok demografis (Usia & Jenis Kelamin) di Indonesia.")
+    # Tampilkan Ringkasan Berwarna Hijau-Putih Menggunakan Metrik Card
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    with col_m1:
+        st.metric("Total Kalori Masuk", f"{total_energi:.1f} kkal", f"{pct_energi:.1f}% Kebutuhan Harian")
+    with col_m2:
+        st.metric("Total Protein", f"{total_protein:.1f} g", f"{pct_protein:.1f}% Kebutuhan Harian")
+    with col_m3:
+        st.metric("Total Gula Dikonsumsi", f"{total_gula:.1f} g", "Batas anak: ~25g/hari", delta_color="inverse")
+    with col_m4:
+        st.metric("Jumlah Item Makanan", f"{len(df_selected_menu)} Menu")
 
-# ==========================================
-# HALAMAN 2: DASHBOARD MAKANAN ANAK
-# ==========================================
-elif menu_pilihan == "1. Dashboard Makanan Anak":
-    if df_makanan is None:
-        strl.error("Gagal memuat file 'EDA_Data_Makanan_Anak.csv'. Pastikan file berada di folder yang sama dengan script ini.")
+    # Sistem Peringatan Pintar Otomatis (Smart Alert System) untuk Orang Tua
+    st.markdown("#### 💡 Catatan & Evaluasi Gizi Bekal/Jajanan Anak:")
+    if total_gula > 25:
+        st.error("⚠️ **Peringatan Gula:** Makanan yang dipilih mengandung gula tinggi (lebih dari 25 gram). Kurangi jajanan manis hari ini untuk mencegah anak terlalu hiperaktif dan menjaga kesehatan gigi!")
+    elif total_protein < (limit_protein * 0.3):
+        st.warning("💡 **Saran Protein:** Kandungan protein dari menu ini masih agak rendah untuk anak usia pertumbuhan. Bunda bisa menambahkan telur, susu, atau keju pada bekalnya.")
     else:
-        strl.title("🥦 Dashboard Analisis Nutrisi Makanan Anak")
-        
-        # --- FILTER INTERAKTIF ---
-        strl.markdown("### 🎛️ Filter Data")
-        list_kategori = ["Semua Kategori"] + list(df_makanan['Kategori'].unique())
-        pilihan_kategori = strl.selectbox("Pilih Kategori Makanan:", list_kategori)
-        
-        # Filter Data Berdasarkan Pilihan Pengguna
-        if pilihan_kategori == "Semua Kategori":
-            df_filtered = df_makanan
-        else:
-            df_filtered = df_makanan[df_makanan['Kategori'] == pilihan_kategori]
-            
-        # Ringkasan KPI Cards
-        col_kpi1, col_kpi2, col_kpi3 = strl.columns(3)
-        col_kpi1.metric("Total Sampel Makanan", f"{df_filtered.shape[0]} Produk")
-        col_kpi2.metric("Rata-rata Kalori", f"{df_filtered['Kalori (kal)'].mean():.1f} kal")
-        col_kpi3.metric("Rata-rata Gula", f"{df_filtered['Gula (g)'].mean():.1f} g")
-        
-        strl.markdown("---")
-        
-        # --- PERTANYAAN 1 & 2 (Dua Kolom) ---
-        col_graph1, col_graph2 = strl.columns(2)
-        
-        with col_graph1:
-            strl.subheader("📌 Top 10 Makanan Kalori Tertinggi")
-            top_kalori = df_filtered.nlargest(10, 'Kalori (kal)')
-            fig, ax = plt.subplots(figsize=(6, 4))
-            sns.barplot(data=top_kalori, x='Kalori (kal)', y='Nama', palette='Reds_r', ax=ax)
-            ax.set_xlabel("Kalori (kal)")
-            ax.set_ylabel("")
-            strl.pyplot(fig)
-            
-        with col_graph2:
-            strl.subheader("📌 Rata-rata Gula Per Kategori")
-            # Tetap gunakan df_makanan global untuk perbandingan kategori yang adil
-            rata_gula = df_makanan.groupby('Kategori')['Gula (g)'].mean().sort_values(ascending=False).reset_index()
-            fig, ax = plt.subplots(figsize=(6, 4))
-            sns.barplot(data=rata_gula, x='Gula (g)', y='Kategori', palette='YlOrBr_r', ax=ax)
-            ax.set_xlabel("Rata-rata Gula (gram)")
-            ax.set_ylabel("")
-            strl.pyplot(fig)
+        st.success("✅ **Bagus Sekali!** Kombinasi menu ini memberikan sebaran gizi dan protein yang baik untuk mendukung aktivitas sekolah dan belajar anak hari ini.")
+else:
+    st.info("Silakan pilih minimal satu menu makanan di atas untuk memulai simulasi pemenuhan gizi anak.")
 
-        strl.markdown("---")
-        
-        # --- PERTANYAAN 3 & 4 (Dua Kolom) ---
-        col_graph3, col_graph4 = strl.columns(2)
-        
-        with col_graph3:
-            strl.subheader("📌 Korelasi Hubungan Lemak vs Kalori")
-            fig, ax = plt.subplots(figsize=(6, 4))
-            sns.regplot(data=df_filtered, x='Lemak (g)', y='Kalori (kal)', color='teal', ax=ax)
-            ax.set_xlabel("Lemak (gram)")
-            ax.set_ylabel("Kalori (kal)")
-            strl.pyplot(fig)
-            # Tampilkan koefisien korelasi angka
-            korelasi = df_filtered[['Lemak (g)', 'Kalori (kal)']].corr().iloc[0, 1]
-            strl.caption(f"Nilai Koefisien Korelasi Pearson (r) = **{korelasi:.2f}**")
-            
-        with col_graph4:
-            strl.subheader("📌 Analisis Variasi Nilai Gizi (CV)")
-            kolom_nutrisi = ['Kalori (kal)', 'Protein (g)', 'Lemak (g)', 'Karbohidrat (g)', 'Gula (g)', 'Kolesterol (g)', 'Sodium (g)', 'Kalium (g)']
-            cv_nutrisi = (df_filtered[kolom_nutrisi].std() / df_filtered[kolom_nutrisi].mean()).sort_values(ascending=False)
-            
-            fig, ax = plt.subplots(figsize=(6, 4))
-            sns.barplot(x=cv_nutrisi.values, y=cv_nutrisi.index, palette='plasma', ax=ax)
-            ax.set_xlabel("Nilai Standar Coefficient of Variation (CV)")
-            strl.pyplot(fig)
-            
-        # --- LIHAT TABEL DATA MENTAH ---
-        strl.markdown("---")
-        with strl.expander("📄 Lihat Data Hasil Saringan"):
-            strl.dataframe(df_filtered)
+st.markdown("---")
 
-# ==========================================
-# HALAMAN 3: DASHBOARD STANDAR AKG
-# ==========================================
-elif menu_pilihan == "2. Dashboard Standar AKG":
-    if df_akg is None:
-        strl.error("Gagal memuat file 'dataset_akg_final.csv'. Pastikan file berada di folder yang sama dengan script ini.")
-    else:
-        strl.title("📋 Dashboard Pola Kebutuhan Gizi Harian (AKG Indonesia)")
-        
-        # --- FILTER INTERAKTIF DEMOGRAFIS ---
-        strl.markdown("### 🎛️ Filter Demografis")
-        col_f1, col_f2 = strl.columns(2)
-        with col_f1:
-            pilihan_jk = strl.selectbox("Pilih Jenis Kelamin:", ["Semua", "Laki-laki", "Perempuan"])
-        with col_f2:
-            pilihan_gizi = strl.selectbox("Pilih Parameter Gizi Utama:", ["Energi (kkal)", "Protein (g)", "Lemak (g)", "Karbohidrat (g)"])
-            
-        # Terapkan filter Jenis Kelamin
-        if pilihan_jk == "Semua":
-            df_akg_filtered = df_akg
-        else:
-            df_akg_filtered = df_akg[df_akg['Jenis Kelamin'] == pilihan_jk]
-            
-        strl.markdown("---")
-        
-        # --- VISUALISASI UTAMA: POLA KEBUTUHAN GIZI ANTAR KELOMPOK UMUR ---
-        strl.subheader(f"📈 Pola Standar Kebutuhan Kebutuhan {pilihan_gizi} Berdasarkan Kelompok Usia")
-        
-        fig, ax = plt.subplots(figsize=(12, 5))
-        # Menggunakan lineplot atau barplot berdasarkan kelompok umur
-        sns.barplot(data=df_akg_filtered, x='Kelompok Umur', y=pilihan_gizi, hue='Jenis Kelamin' if pilihan_jk == "Semua" else None, palette='muted', ax=ax)
-        plt.xticks(rotation=45, ha='right')
-        ax.set_ylabel(pilihan_gizi)
-        ax.set_xlabel("Kelompok Umur / Demografis")
-        strl.pyplot(fig)
-        
-        strl.markdown("---")
-        
-        # --- ANALISIS PEMENUHAN GIZI (ASUPAN AKTUAL VS STANDAR AKG) ---
-        strl.subheader("🎯 Analisis Gap Pemenuhan Gizi Masyarakat")
-        strl.write("Bagian ini membandingkan apakah rata-rata asupan gizi harian aktual riil di lapangan sudah memenuhi standar AKG resmi.")
-        
-        # Catatan: Asumsi di dataset AKG Anda ada kolom asupan aktual atau Anda ingin menunjukkan summary tingkat pemenuhan gizi.
-        # Jika ada kolom 'Asupan_Energi', kita bisa membuat visualisasi perbandingan (Grouped Bar Chart).
-        kolom_aktual = f"Asupan {pilihan_gizi}"
-        
-        if kolom_aktual in df_akg.columns:
-            # Jika kolom pembanding aktual tersedia di dataset Anda
-            df_melted = df_akg_filtered.melt(id_vars=['Kelompok Umur'], value_vars=[pilihan_gizi, kolom_aktual], 
-                                             var_name='Jenis Nilai', value_name='Nilai Gizi')
-            
-            fig2, ax2 = plt.subplots(figsize=(12, 5))
-            sns.barplot(data=df_melted, x='Kelompok Umur', y='Nilai Gizi', hue='Jenis Nilai', palette='Set2', ax=ax2)
-            plt.xticks(rotation=45, ha='right')
-            strl.pyplot(fig2)
-        else:
-            # Jika data asupan aktual belum digabung, tampilkan placeholder simulasi/petunjuk analisis gap
-            strl.warning(f"Untuk mengaktifkan grafik perbandingan otomatis, pastikan dataset Anda memiliki kolom asupan riil lapangan bernama 'Asupan {pilihan_gizi}'.")
-            
-            # Simulasi Insight Gizi Fisiologis
-            strl.info("""
-            **💡 Insight Pola Demografis & Fisiologis Standar AKG:**
-            1. **Puncak Kebutuhan Energi & Makro:** Berada pada kelompok remaja akhir dan dewasa muda (usia 16-29 tahun), terutama pada laki-laki akibat aktivitas fisik dan pertumbuhan biologis makro.
-            2. **Kelompok Kondisi Fisiologis Khusus:** Ibu hamil dan menyusui membutuhkan booster/tambahan energi (+300 hingga +500 kkal) serta protein lebih tinggi di atas standar wanita umum untuk mendukung tumbuh kembang janin.
-            """)
-            
-        # --- LIHAT TABEL DATA AKG MENTAH ---
-        with strl.expander("📄 Lihat Tabel Standar AKG Lengkap"):
-            strl.dataframe(df_akg_filtered)
+# --- BARIS TAB UNTUK ANALISIS MENDALAM ---
+st.header("📊 Fitur 2: Eksplorasi Kamus Data Gizi Makanan")
+tab_distribusi, tab_produsen = st.tabs(["📈 Analisis Kandungan Zat Gizi", "🏭 Perbandingan Kategori & Produsen"])
+
+# TAB 1: Distribusi Gizi Interaktif
+with tab_distribusi:
+    st.subheader("Melihat Sebaran Nutrisi Makanan di Indonesia")
+    st.markdown("Gunakan grafik ini untuk melihat zat gizi mana yang paling mendominasi di pasaran.")
+    
+    pilihan_zat = st.selectbox(
+        "Pilih Komponen Zat Gizi:",
+        ['Energi (kkal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
+    )
+    
+    # Histogram interaktif dengan warna Hijau (Hex: #4CAF50)
+    fig_hist = px.histogram(
+        df_makanan,
+        x=pilihan_zat,
+        nbins=30,
+        title=f"Grafik Banyaknya Makanan Berdasarkan Kandungan {pilihan_zat}",
+        color_discrete_sequence=['#4CAF50'],
+        marginal="box"
+    )
+    fig_hist.update_layout(
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        bargap=0.05
+    )
+    st.plotly_chart(fig_hist, use_container_width=True)
+
+# TAB 2: Komparasi Produsen Makanan Masakan Anak
+with tab_produsen:
+    st.subheader("Rata-Rata Kandungan Gizi Berdasarkan Kelompok / Produsen")
+    st.markdown("Membantu orang tua mengetahui kategori masakan dari produsen mana yang memiliki kalori atau gula paling tinggi.")
+    
+    # Top 10 kelompok produsen terbanyak
+    top_p_idx = df_makanan['Produsen'].value_counts().head(10).index
+    df_top_p = df_makanan[df_makanan['Produsen'].isin(top_p_idx)]
+    df_grouped_p = df_top_p.groupby('Produsen')[['Energi (kkal)', 'Protein (g)', 'Gula (g)']].mean().reset_index()
+    
+    pilihan_urut = st.radio("Urutkan Produsen Berdasarkan Rerata:", ['Energi (kkal)', 'Protein (g)', 'Gula (g)'], horizontal=True)
+    df_grouped_p = df_grouped_p.sort_values(by=pilihan_urut, ascending=False)
+    
+    fig_bar = px.bar(
+        df_grouped_p,
+        x='Produsen',
+        y=pilihan_urut,
+        color=pilihan_urut,
+        title=f"Rerata {pilihan_urut} per Kategori Produsen",
+        color_continuous_scale=['#E8F5E9', '#4CAF50', '#1B5E20'] # Gradasi Hijau Putih Gelap
+    )
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+# --- FITUR 3: TABEL DATA DETAIL YANG MUDAH DICARI ---
+st.markdown("---")
+st.header("🔍 Fitur 3: Kamus Gizi Lengkap (Bisa Dicari)")
+st.markdown("Bunda tinggal mengetik kata kunci makanan (misal: *'Susu'*, *'Biskuit'*, *'Roti'*) di bawah untuk melihat nilai aslinya.")
+
+# Kolom pencarian teks langsung di atas tabel data
+pencarian_bunda = st.text_input("Ketik Nama Makanan di Sini untuk Mencari:", value="", placeholder="Contoh: Susu, Cokelat, Nasi...")
+
+df_tabel_final = df_makanan.copy()
+if pencarian_bunda:
+    df_tabel_final = df_tabel_final[df_tabel_final['Nama_Makanan'].str.contains(pencarian_bunda, case=False, na=False)]
+
+# Tampilkan tabel yang bersih
+kolom_ortu = ['Nama_Makanan', 'Produsen', 'Porsi', 'Energi (kkal)', 'Protein (g)', 'Karbohidrat (g)', 'Lemak (g)', 'Gula (g)']
+st.dataframe(df_tabel_final[kolom_ortu], use_container_width=True)
