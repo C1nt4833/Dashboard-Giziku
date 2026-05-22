@@ -37,13 +37,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. MEMUAT DATASET (DENGAN CACHING)
+# 2. MEMUAT DATASET (DENGAN CACHING & AUTO-SEPARATOR)
 # ==========================================
 @st.cache_data
 def load_all_data():
-    # 2a. Memuat Data Gizi Makanan Anak (Sesuai file revisi Anda)
+    # 2a. Memuat Data Gizi Makanan Anak (Diberi pelindung auto-separator)
     url_makanan = "https://raw.githubusercontent.com/ekasaaa/analisis-dataset-gizi/refs/heads/main/nilai-gizi.csv"
-    df_makanan = pd.read_csv(url_makanan)
+    
+    # Menggunakan sep=None dan engine='python' agar Pandas otomatis mendeteksi pembatas koma/titik-koma
+    # dan tidak error jika ada tanda koma di dalam teks nama makanan
+    df_makanan = pd.read_csv(url_makanan, sep=None, engine='python', on_bad_lines='skip')
     df_makanan.columns = df_makanan.columns.str.strip()
     
     # Bersihkan kolom gizi utama dari teks tak bernilai jika tipenya objek/string
@@ -54,9 +57,9 @@ def load_all_data():
                 df_makanan[col] = df_makanan[col].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float)
             df_makanan[col] = pd.to_numeric(df_makanan[col], errors='coerce').fillna(0)
             
-    # 2b. Memuat Data Standar AKG (Sesuai file akg_indonesia_final Anda)
+    # 2b. Memuat Data Standar AKG
     url_akg = "https://raw.githubusercontent.com/C1nt4833/giziku-etl/main/akg_indonesia_final.csv"
-    df_akg = pd.read_csv(url_akg)
+    df_akg = pd.read_csv(url_akg, sep=None, engine='python', on_bad_lines='skip')
     df_akg.columns = df_akg.columns.str.strip()
     
     return df_makanan, df_akg
