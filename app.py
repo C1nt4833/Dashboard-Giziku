@@ -36,11 +36,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. MEMUAT DATASET UTAMA DARI GITHUB ANDA
+# 2. MEMUAT DATASET UTAMA DARI GITHUB
 # ==========================================
 @st.cache_data
 def load_all_data():
-    # Tautan langsung (Raw Link) ke dataset Dashboard-Giziku Anda
+    # Tautan langsung (Raw Link) ke dataset Dashboard-Giziku
     url_makanan = "https://raw.githubusercontent.com/C1nt4833/Dashboard-Giziku/main/EDA_Data_Makanan_Anak(revisi).csv"
     
     df_makanan = pd.read_csv(url_makanan, sep=',', encoding='utf-8-sig')
@@ -73,20 +73,39 @@ st.sidebar.title("💚 Profil Buah Hati")
 st.sidebar.markdown("Tentukan rentang usia dan jenis kelamin si kecil untuk menyesuaikan target batas gizi harian mereka.")
 
 selected_gender = st.sidebar.radio("Jenis Kelamin Anak:", ['Laki-laki', 'Perempuan'])
-selected_usia = st.sidebar.selectbox("Usia Anak Saat Ini:", ['Anak Sekolah (7-9 tahun)', 'Anak Sekolah (10-12 tahun)'])
 
-# Logika pencocokan batas AKG otomatis
-if '7-9' in selected_usia:
+# PENAMBAHAN OPSI: Menambahkan kategori usia 4-6 tahun
+selected_usia = st.sidebar.selectbox(
+    "Usia Anak Saat Ini:", 
+    [
+        'Anak Prasekolah (4-6 tahun)', 
+        'Anak Sekolah (7-9 tahun)', 
+        'Anak Sekolah (10-12 tahun)'
+    ]
+)
+
+# LOGIKA AKG PERBARUAN: Menangani filter untuk rentang 4-6 tahun, 7-9 tahun, dan 10-12 tahun
+if '4-6' in selected_usia:
+    # Berdasarkan Permenkes AKG, kategori usia 4-6 tahun umumnya digabung tanpa membedakan gender secara ekstrem di tabel standar dasar
+    df_akg_filtered = df_akg[(df_akg['Kategori'] == 'Bayi/Anak') & (df_akg['Label_Umur_Kondisi'].str.contains('4-6', na=False))]
+elif '7-9' in selected_usia:
     df_akg_filtered = df_akg[(df_akg['Kategori'] == 'Bayi/Anak') & (df_akg['Label_Umur_Kondisi'].str.contains('7-9', na=False))]
 else:
     kategori_target = 'Laki-Laki' if selected_gender == 'Laki-laki' else 'Perempuan'
     df_akg_filtered = df_akg[(df_akg['Kategori'] == kategori_target) & (df_akg['Label_Umur_Kondisi'].str.contains('10-12', na=False))]
 
+# Mengambil nilai limit gizi dari dataset atau menggunakan fallback nilai standar aman jika tidak ketemu
 if not df_akg_filtered.empty:
     limit_energi = float(pd.to_numeric(df_akg_filtered['Energi (kkal)'].values[0], errors='coerce'))
     limit_protein = float(pd.to_numeric(df_akg_filtered['Protein (g)'].values[0], errors='coerce'))
 else:
-    limit_energi, limit_protein = 1650.0, 40.0
+    # Nilai default fallback jika filtering gagal (disesuaikan acuan umum 4-6 tahun PMK AKG: ~1400 kal, protein ~25g)
+    if '4-6' in selected_usia:
+        limit_energi, limit_protein = 1400.0, 25.0
+    elif '7-9' in selected_usia:
+        limit_energi, limit_protein = 1650.0, 40.0
+    else:
+        limit_energi, limit_protein = 2000.0, 50.0
 
 st.sidebar.markdown(f"""
 <div style="background-color: #E8F5E9; padding: 15px; border-radius: 10px; border-left: 5px solid #2E7D32; font-size: 14px;">
@@ -100,7 +119,8 @@ st.sidebar.markdown(f"""
 # ==========================================
 # 4. HALAMAN UTAMA: ANTARMUKA ORANG TUA
 # ==========================================
-st.title("👦 Kalkulator & Kamus Gizi Anak Sekolah (Usia 6-12 Tahun)")
+# Judul disesuaikan dari 6-12 tahun menjadi 4-12 tahun
+st.title("👦 Kalkulator & Kamus Gizi Anak (Usia 4-12 Tahun)")
 st.markdown("Selamat datang Ayah & Bunda! Dashboard ini dirancang khusus untuk memantau apakah menu sarapan, bekal sekolah, atau jajanan harian si kecil sudah sehat seimbang atau justru mengandung gula berlebih.")
 st.markdown("---")
 
