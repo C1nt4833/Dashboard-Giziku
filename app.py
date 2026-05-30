@@ -74,19 +74,18 @@ st.sidebar.markdown("Tentukan rentang usia dan jenis kelamin si kecil untuk meny
 
 selected_gender = st.sidebar.radio("Jenis Kelamin Anak:", ['Laki-laki', 'Perempuan'])
 
-# PENAMBAHAN OPSI: Menambahkan kategori usia 4-6 tahun
+# Teks diubah menjadi 'Anak Prasekolah (6 tahun)' sesuai keinginan Anda
 selected_usia = st.sidebar.selectbox(
     "Usia Anak Saat Ini:", 
     [
-        'Anak Prasekolah (4-6 tahun)', 
+        'Anak Prasekolah (6 tahun)', 
         'Anak Sekolah (7-9 tahun)', 
         'Anak Sekolah (10-12 tahun)'
     ]
 )
 
-# LOGIKA AKG PERBARUAN: Menangani filter untuk rentang 4-6 tahun, 7-9 tahun, dan 10-12 tahun
-if '4-6' in selected_usia:
-    # Berdasarkan Permenkes AKG, kategori usia 4-6 tahun umumnya digabung tanpa membedakan gender secara ekstrem di tabel standar dasar
+# LOGIKA AKG: Jika memilih '6 tahun', sistem di balik layar tetap mencari '4-6' agar sinkron dengan dataset Anda
+if '6 tahun' in selected_usia:
     df_akg_filtered = df_akg[(df_akg['Kategori'] == 'Bayi/Anak') & (df_akg['Label_Umur_Kondisi'].str.contains('4-6', na=False))]
 elif '7-9' in selected_usia:
     df_akg_filtered = df_akg[(df_akg['Kategori'] == 'Bayi/Anak') & (df_akg['Label_Umur_Kondisi'].str.contains('7-9', na=False))]
@@ -94,13 +93,13 @@ else:
     kategori_target = 'Laki-Laki' if selected_gender == 'Laki-laki' else 'Perempuan'
     df_akg_filtered = df_akg[(df_akg['Kategori'] == kategori_target) & (df_akg['Label_Umur_Kondisi'].str.contains('10-12', na=False))]
 
-# Mengambil nilai limit gizi dari dataset atau menggunakan fallback nilai standar aman jika tidak ketemu
+# Mengambil nilai limit gizi dari dataset atau menggunakan fallback nilai standar aman
 if not df_akg_filtered.empty:
     limit_energi = float(pd.to_numeric(df_akg_filtered['Energi (kkal)'].values[0], errors='coerce'))
     limit_protein = float(pd.to_numeric(df_akg_filtered['Protein (g)'].values[0], errors='coerce'))
 else:
-    # Nilai default fallback jika filtering gagal (disesuaikan acuan umum 4-6 tahun PMK AKG: ~1400 kal, protein ~25g)
-    if '4-6' in selected_usia:
+    # Nilai default jika filtering dataset mengalami kendala
+    if '6 tahun' in selected_usia:
         limit_energi, limit_protein = 1400.0, 25.0
     elif '7-9' in selected_usia:
         limit_energi, limit_protein = 1650.0, 40.0
@@ -119,8 +118,8 @@ st.sidebar.markdown(f"""
 # ==========================================
 # 4. HALAMAN UTAMA: ANTARMUKA ORANG TUA
 # ==========================================
-# Judul disesuaikan dari 6-12 tahun menjadi 4-12 tahun
-st.title("👦 Kalkulator & Kamus Gizi Anak (Usia 4-12 Tahun)")
+# Judul dikembalikan ke rentang 6-12 Tahun sesuai request Anda
+st.title("👦 Kalkulator & Kamus Gizi Anak Sekolah (Usia 6-12 Tahun)")
 st.markdown("Selamat datang Ayah & Bunda! Dashboard ini dirancang khusus untuk memantau apakah menu sarapan, bekal sekolah, atau jajanan harian si kecil sudah sehat seimbang atau justru mengandung gula berlebih.")
 st.markdown("---")
 
